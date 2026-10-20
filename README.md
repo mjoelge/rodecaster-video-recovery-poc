@@ -117,3 +117,4 @@ The project is a proof of concept, not a universal repair utility. It makes
 its assumptions explicit so other containers, codecs, and disk layouts can be
 added without hiding uncertain repairs.
 
+Made with ChatGPT.
