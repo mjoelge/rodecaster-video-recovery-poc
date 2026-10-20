@@ -46,7 +46,7 @@ def fragment(data, off):
         for child, pos, length in boxes(data, boxoff + 8, boxoff + boxsize):
             if child == b"tfhd" and length >= 16:
                 track = struct.unpack_from(">I", data, pos + 12)[0]
-                flags = int.from_bytes(data[pos + 9:pos + 12])
+                flags = int.from_bytes(data[pos + 9:pos + 12], "big")
                 base = struct.unpack_from(">Q", data, pos + 16)[0] if flags & 1 and length >= 24 else off
             elif child == b"tfdt" and length >= 16:
                 version = data[pos + 8]
@@ -55,7 +55,7 @@ def fragment(data, off):
                 elif version == 0:
                     decode_time = struct.unpack_from(">I", data, pos + 12)[0]
             elif child == b"trun" and length >= 16:
-                flags = int.from_bytes(data[pos + 9:pos + 12])
+                flags = int.from_bytes(data[pos + 9:pos + 12], "big")
                 samples = struct.unpack_from(">I", data, pos + 12)[0]
                 data_offset = struct.unpack_from(">i", data, pos + 16)[0] if flags & 1 and length >= 20 else 0
                 cursor = pos + 16 + 4 * bool(flags & 1) + 4 * bool(flags & 4)
@@ -107,11 +107,11 @@ def children_by_track(moof):
 def video_duration(moof):
     track = children_by_track(moof)[1]
     trun, length = track[b"trun"]
-    flags = int.from_bytes(moof[trun + 9:trun + 12])
+    flags = int.from_bytes(moof[trun + 9:trun + 12], "big")
     count = struct.unpack_from(">I", moof, trun + 12)[0]
     if not flags & 0x100:
         tfhd, tfhd_size = track[b"tfhd"]
-        tfhd_flags = int.from_bytes(moof[tfhd + 9:tfhd + 12])
+        tfhd_flags = int.from_bytes(moof[tfhd + 9:tfhd + 12], "big")
         cursor = tfhd + 16 + 8 * bool(tfhd_flags & 1) + 4 * bool(tfhd_flags & 2)
         if not tfhd_flags & 8 or cursor + 4 > tfhd + tfhd_size:
             raise ValueError("video sample duration unavailable")
@@ -125,7 +125,7 @@ def video_duration(moof):
 
 def video_sample_sizes(moof):
     trun, length = children_by_track(moof)[1][b"trun"]
-    flags = int.from_bytes(moof[trun + 9:trun + 12])
+    flags = int.from_bytes(moof[trun + 9:trun + 12], "big")
     count = struct.unpack_from(">I", moof, trun + 12)[0]
     if not flags & 0x200 or count < 2:
         raise ValueError("video trun has no per-sample sizes")
@@ -159,7 +159,7 @@ def init_header(data, first_moof):
 def patch_base(moof, output_offset):
     for track in children_by_track(moof).values():
         pos, size = track[b"tfhd"]
-        if size < 24 or not int.from_bytes(moof[pos + 9:pos + 12]) & 1:
+        if size < 24 or not int.from_bytes(moof[pos + 9:pos + 12], "big") & 1:
             raise ValueError("tfhd lacks explicit base-data-offset")
         struct.pack_into(">Q", moof, pos + 16, output_offset)
 
@@ -175,8 +175,8 @@ def audio_signature(item):
     trun = bytearray(moof[trun_pos:trun_pos + trun_size])
     tfdt = moof[tfdt_pos:tfdt_pos + tfdt_size]
     if (tfhd_size < 24 or trun_size < 20 or tfdt_size < 16 or
-            not int.from_bytes(tfhd[9:12]) & 1 or
-            not int.from_bytes(trun[9:12]) & 1):
+            not int.from_bytes(tfhd[9:12], "big") & 1 or
+            not int.from_bytes(trun[9:12], "big") & 1):
         raise ValueError("unsupported audio table offsets")
     tfhd[16:24] = b"\0" * 8
     trun[16:20] = b"\0" * 4
@@ -209,7 +209,7 @@ def hybrid_fragment(video, audio, output_offset):
     else:
         struct.pack_into(">I", moof, video_tfdt + 12, video["video_time"])
     audio_trun, _ = vt[2][b"trun"]
-    if not int.from_bytes(moof[audio_trun + 9:audio_trun + 12]) & 1:
+    if not int.from_bytes(moof[audio_trun + 9:audio_trun + 12], "big") & 1:
         raise ValueError("audio trun lacks a data offset")
     struct.pack_into(">i", moof, audio_trun + 16, len(moof) + 8 + len(video["video"]))
     patch_base(moof, output_offset)
