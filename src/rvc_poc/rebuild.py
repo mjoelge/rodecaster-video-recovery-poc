@@ -258,8 +258,11 @@ def main():
                     print(f"sequence {seq}/{max_seq}; written {len(report['written'])}", flush=True)
         if not report["written"]:
             output.unlink()
-            raise SystemExit("no fragments passed structural repair")
-        manifest.write_text(json.dumps(report, indent=2) + "\n")
+        with manifest.open("x") as stream:
+            json.dump(report, stream, indent=2)
+            stream.write("\n")
+        if not report["written"]:
+            raise SystemExit(f"no fragments passed structural repair; diagnostic manifest saved: {manifest}")
     print(f"Wrote {len(report['written'])} fragments to {output}")
     print(f"Missing sequences: {len(report['missing'])}; manifest: {manifest}")
 

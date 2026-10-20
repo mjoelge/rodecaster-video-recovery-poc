@@ -28,7 +28,10 @@ def main():
     start, length = args.start_byte, args.length_byte
     if output.exists() or source == output:
         ap.error("output must be a new path distinct from the source")
-    ensure_separate_destination(source, output.parent)
+    try:
+        ensure_separate_destination(source, output.parent)
+    except ValueError as exc:
+        ap.error(str(exc))
     if (start < 0 or length <= 0 or args.anchor_offset < 0 or
             any(n % 512 for n in (start, length, args.anchor_offset))):
         ap.error("offsets and length must be nonnegative and sector aligned")

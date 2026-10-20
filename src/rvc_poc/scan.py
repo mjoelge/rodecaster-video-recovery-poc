@@ -97,7 +97,10 @@ def main():
     out = args.out_dir.expanduser().resolve()
     if out.exists() or out == source or source in out.parents:
         ap.error("out-dir must be new and outside the input")
-    ensure_separate_destination(source, out.parent)
+    try:
+        ensure_separate_destination(source, out.parent)
+    except ValueError as exc:
+        ap.error(str(exc))
     with source.open("rb") as f:
         size = source_size(source, f.fileno())
         start = args.start_byte

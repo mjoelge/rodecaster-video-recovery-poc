@@ -66,6 +66,8 @@ Use `--max-sequence` to constrain a session, and `--min-video-bytes` or
 `--max-video-bytes` when multiple video streams share a carved file. The
 manifest reports missing sequences. Source priority follows the order of
 `--video` arguments; each camera angle should normally be rebuilt separately.
+If no fragment passes repair, the empty media output is removed and the
+diagnostic manifest remains for review.
 Without `--audio`, the selected video fragment supplies its own audio.
 Explicit donors must match its audio time, sample count, payload byte count,
 and table structure. Distinct compatible donors are reported as ambiguous;
@@ -139,7 +141,8 @@ added without hiding uncertain repairs.
 This independent project is not affiliated with or endorsed by RØDE. RØDE
 and RØDECaster are trademarks of their respective owner.
 
-The synthetic test suite runs with `python -m unittest discover -s tests -v`.
-It needs no media, attached disk, network access, or administrator privileges.
+After the editable install in Setup, run the synthetic suite with
+`python -m unittest discover -s tests -v`. The tests need no media, attached
+disk, network access, or administrator privileges.
 
 Made with ChatGPT.
