@@ -8,4 +8,11 @@
 !src/
 !src/rvc_poc/
 !src/rvc_poc/*.py
+!tests/
+!tests/**/*.py
+!tests/*.py
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+!.github/workflows/*.yaml
 

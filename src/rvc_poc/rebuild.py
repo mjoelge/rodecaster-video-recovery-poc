@@ -13,7 +13,7 @@ from collections import defaultdict
 from contextlib import ExitStack
 from pathlib import Path
 
-from .mp4 import (fragment, hybrid_fragment, init_header, scan_fragments,
+from .mp4 import (audio_signature, fragment, hybrid_fragment, init_header, scan_fragments,
                   video_duration, video_sample_sizes)
 
 
@@ -26,6 +26,7 @@ def repair_fragment(data, row, block_size=131072, max_blocks=128):
     sequence, moof_size, mdat_size, tracks = parsed
     video, audio = tracks[1], tracks[2]
     if (sequence != row["sequence"] or video[4] is None or audio[4] is None or
+            audio[1] is None or audio[0] is None or
             mdat_size != 8 + video[4] + audio[4]):
         raise ValueError("unsupported payload layout")
     moof = bytes(data[off:off + moof_size])
@@ -81,6 +82,7 @@ def repair_fragment(data, row, block_size=131072, max_blocks=128):
         "sequence": sequence, "moof": moof,
         "video": video_payload, "audio": mdat[8 + video[4]:],
         "video_time": video[0], "audio_time": audio[0],
+        "audio_samples": audio[1], "audio_bytes": audio[4],
         "inserted_blocks_removed": last_shift,
     }
 
@@ -96,6 +98,34 @@ def index(data, path):
                                "video_time": video[0], "audio_time": audio[0],
                                "video_bytes": video[4], "audio_bytes": audio[4]})
     return rows
+
+
+def reference(row):
+    return {"path": str(row["path"]), "offset": row["offset"]}
+
+
+def select_audio_donor(video, candidates):
+    """Choose one structurally matching audio payload, never by size alone.
+
+    Candidates are (catalog_row, repaired_fragment) pairs. Exact duplicate
+    audio bytes collapse; distinct compatible payloads remain ambiguous.
+    """
+    expected = audio_signature(video)
+    unique = {}
+    rejected = []
+    for row, item in candidates:
+        ref = reference(row)
+        try:
+            if audio_signature(item) != expected:
+                rejected.append({**ref, "reason": "audio timing or table differs"})
+                continue
+        except (ValueError, KeyError, IndexError, struct.error) as exc:
+            rejected.append({**ref, "reason": str(exc)})
+            continue
+        unique.setdefault(item["audio"], (row, item))
+    if len(unique) > 1:
+        return None, rejected, [reference(row) for row, _ in unique.values()]
+    return (next(iter(unique.values())) if unique else None), rejected, []
 
 
 def main():
@@ -151,13 +181,13 @@ def main():
         if max_seq < 0 or max_seq > 100000:
             ap.error("invalid or unavailable sequence range")
         audio_index = defaultdict(list)
-        for path in audio_paths or video_paths:
+        for path in audio_paths:
             for seq, rows in indexes[path].items():
                 audio_index[seq].extend(rows)
         report = {"video_sources": [str(p) for p in video_paths],
                   "audio_sources": [str(p) for p in audio_paths],
                   "video_step": step, "max_sequence": max_seq,
-                  "written": [], "missing": [], "rejected": []}
+                  "written": [], "missing": [], "rejected": [], "ambiguous": []}
         with output.open("xb") as dest:
             dest.write(head)
             for seq in range(max_seq + 1):
@@ -171,31 +201,57 @@ def main():
                     try:
                         video = repair_fragment(data[row["path"]], row,
                                                 args.block_size, args.max_inserted_blocks)
-                        donors = sorted((r for r in audio_index.get(seq, [])
-                                         if r["audio_time"] == row["audio_time"]),
-                                        key=lambda r: -r["audio_bytes"])
-                        if not donors and not audio_paths:
-                            donors = [row]
-                        for donor in donors:
-                            try:
-                                audio = video if donor == row else repair_fragment(
-                                    data[donor["path"]], donor,
-                                    args.block_size, args.max_inserted_blocks)
-                                payload = hybrid_fragment(video, audio, dest.tell())
-                                dest.write(payload)
-                                report["written"].append({
-                                    "sequence": seq, "video_source": str(row["path"]),
-                                    "video_offset": row["offset"], "audio_source": str(donor["path"]),
-                                    "audio_offset": donor["offset"],
-                                    "inserted_blocks_removed": video["inserted_blocks_removed"]})
-                                written = True
-                                break
-                            except (ValueError, KeyError, IndexError, struct.error):
-                                continue
-                        if written:
-                            break
                     except (ValueError, KeyError, IndexError, struct.error) as exc:
-                        report["rejected"].append({"sequence": seq, "reason": str(exc)})
+                        report["rejected"].append({"sequence": seq, **reference(row),
+                                                   "reason": str(exc)})
+                        continue
+                    if not audio_paths:
+                        chosen = (row, video)
+                    else:
+                        try:
+                            audio_signature(video)
+                        except (ValueError, KeyError, IndexError, struct.error) as exc:
+                            report["rejected"].append({"sequence": seq, **reference(row),
+                                                       "reason": str(exc)})
+                            break
+                        donor_candidates = []
+                        for donor in audio_index.get(seq, []):
+                            if donor["audio_time"] != row["audio_time"]:
+                                report["rejected"].append({"sequence": seq, **reference(donor),
+                                                           "reason": "audio decode time differs"})
+                                continue
+                            try:
+                                item = repair_fragment(data[donor["path"]], donor,
+                                                       args.block_size, args.max_inserted_blocks)
+                                donor_candidates.append((donor, item))
+                            except (ValueError, KeyError, IndexError, struct.error) as exc:
+                                report["rejected"].append({"sequence": seq, **reference(donor),
+                                                           "reason": str(exc)})
+                        chosen, rejected, ambiguous = select_audio_donor(video, donor_candidates)
+                        report["rejected"].extend({"sequence": seq, **entry} for entry in rejected)
+                        if ambiguous:
+                            report["ambiguous"].append({"sequence": seq, "video": reference(row),
+                                                        "audio_donors": ambiguous})
+                            break
+                        if chosen is None:
+                            report["rejected"].append({"sequence": seq, **reference(row),
+                                                       "reason": "no compatible audio donor"})
+                            break
+                    donor, audio = chosen
+                    try:
+                        payload = hybrid_fragment(video, audio, dest.tell())
+                    except (ValueError, KeyError, IndexError, struct.error) as exc:
+                        report["rejected"].append({"sequence": seq, **reference(donor),
+                                                   "reason": str(exc)})
+                        break
+                    dest.write(payload)
+                    report["written"].append({
+                        "sequence": seq, "video_source": str(row["path"]),
+                        "video_offset": row["offset"], "audio_source": str(donor["path"]),
+                        "audio_offset": donor["offset"],
+                        "inserted_blocks_removed": video["inserted_blocks_removed"]})
+                    written = True
+                    break
                 if not written:
                     report["missing"].append(seq)
                 if seq and seq % 100 == 0:

@@ -5,6 +5,10 @@ recordings from a formatted disk. The tools also form a starting point for
 other fragmented MP4/MOV recovery work. They inspect the source read only and
 write new catalogs, captures, and reconstructed files to a separate location.
 
+**Experimental recovery software:** this is not a forensic guarantee or a
+universal repair utility. A plausible duration does not prove that picture
+and sound are complete or correct.
+
 **No recovered media, disk image, real scan result, device identifier, filename,
 timestamp, hash, or case-specific disk offset is included in this repository.**
 All examples below use placeholders. Generated outputs contain private metadata;
@@ -62,6 +66,12 @@ Use `--max-sequence` to constrain a session, and `--min-video-bytes` or
 `--max-video-bytes` when multiple video streams share a carved file. The
 manifest reports missing sequences. Source priority follows the order of
 `--video` arguments; each camera angle should normally be rebuilt separately.
+Without `--audio`, the selected video fragment supplies its own audio.
+Explicit donors must match its audio time, sample count, payload byte count,
+and table structure. Distinct compatible donors are reported as ambiguous;
+that sequence is skipped. **Structural compatibility does not establish
+recording identity.** Group inputs by session before rebuilding and review the
+sound afterward.
 
 `rvc-capture` needs a known source capacity and the SHA-256 of a **4096-byte
 anchor**, established independently from a carved file or an earlier disk
@@ -74,10 +84,19 @@ rvc-capture /path/to/source-disk.img /path/to/work/region.img \
   --anchor-offset KNOWN_OFFSET --anchor-sha256 KNOWN_SHA256
 ```
 
-The range and anchor offset must be sector aligned. On macOS, the tools also
-reject output to the same physical disk as an external raw source. Raw-device
-access may require administrator privileges; enter credentials only in your
-local terminal.
+The range and anchor offset must be sector aligned. On macOS, raw access is
+limited to an external whole disk, and `diskutil` must identify a separate
+destination disk. On Linux, `lsblk` must resolve the raw source and destination
+to different physical disks. Simple disks and partitions are supported;
+device-mapper, RAID, loop, overlay, and unresolved topologies are rejected.
+For a **regular disk image**, the tools cannot infer whether its destination
+is separate from the original physical disk; choosing safe storage remains
+your responsibility. Sources are opened read only. Raw access may require
+administrator privileges; enter credentials only in your local terminal.
+
+An interrupted capture or rebuild can leave a partial new output. Review or
+remove it before retrying; the commands refuse to overwrite an existing
+output or manifest.
 
 ## Method
 
@@ -116,5 +135,11 @@ or an independent copy of those bytes.
 The project is a proof of concept, not a universal repair utility. It makes
 its assumptions explicit so other containers, codecs, and disk layouts can be
 added without hiding uncertain repairs.
+
+This independent project is not affiliated with or endorsed by RØDE. RØDE
+and RØDECaster are trademarks of their respective owner.
+
+The synthetic test suite runs with `python -m unittest discover -s tests -v`.
+It needs no media, attached disk, network access, or administrator privileges.
 
 Made with ChatGPT.

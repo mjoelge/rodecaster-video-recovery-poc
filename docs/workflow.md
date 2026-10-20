@@ -9,7 +9,11 @@ Unmount or stop using the formatted recording disk. Do not run recovery tools
 that write to it. Record capacity and filesystem information. Create a full
 image if storage permits, keeping a checksum and a work log outside the public
 repository. If imaging is impractical, restrict raw reads to known byte ranges
-and capture them to another physical disk.
+and capture them to another physical disk. The raw-device tools reject a
+destination when they cannot establish that separation. On Linux this includes
+mapped, RAID, loop, overlay, and unresolved device layouts. With a regular
+disk image, the operator must establish physical separation from the original
+disk independently.
 
 Carve with PhotoRec or a comparable tool. Keep its DFXML mapping when available:
 it can map a carved file offset to an original physical disk offset. Do not
@@ -56,10 +60,14 @@ duration to select a consistent sequence timeline. When an aligned extra block
 interrupts `mdat`, it follows per-sample sizes and HEVC NAL markers to locate
 the boundary. It removes only blocks supported by those checks.
 
-A companion file can donate audio for the same sequence and audio decode time.
-Build each camera angle separately; synchronized angles are separate outputs.
-The local manifest lists source selections, skipped fragments, and holes. If a
-fragment fails validation, leave a gap rather than inventing bytes.
+A companion file can donate audio when its sequence, decode time, sample
+count, byte count, and audio table structure match the selected video
+fragment. More than one distinct compatible donor is ambiguous, so that
+sequence is skipped. These checks do not establish session identity: supply
+only sources already grouped as one recording. Build each camera angle
+separately; synchronized angles are separate outputs. The local manifest lists
+source selections, rejected or ambiguous donors, and holes. If a fragment
+fails validation, leave a gap rather than inventing bytes.
 
 The current proof of concept does not reconstruct an arbitrary missing `moov`,
 repair every possible displaced opening, or choose the correct camera on visual
@@ -72,7 +80,9 @@ disk offset. Use a raw scan to locate later fragments or a closing index.
 Confirm the source device's capacity and an independent anchor before copying
 a byte range. Check neighboring recording boundaries so the capture does not
 silently merge separate sessions. `rvc-capture` records a bounded region to a
-new file; it does not modify the source.
+new file; it does not modify the source. If copying is interrupted, a partial
+new file may remain and must be reviewed or removed before retrying. The same
+applies to reconstructed outputs.
 
 ## 6. Review the result
 

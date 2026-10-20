@@ -41,8 +41,10 @@ Camera and program files may contain matching fragment timelines while their
 video payloads differ. Audio may be recoverable in another file even if one
 camera's audio bytes are damaged. The rebuild tool can transplant a matching
 audio `trun` and `tfdt` into the selected video fragment, then rewrite the
-output offsets. Donor compatibility is structural; the result still requires
-decoding and listening.
+output offsets. Matching decode time, sample count, byte count, and normalized
+audio table structure are required. Distinct compatible payloads are rejected
+as ambiguous. These structural checks cannot prove that two files came from
+the same recording; the result still requires decoding and listening.
 
 Each camera angle needs its own reconstructed output. Matching sequence and
 time values are a prerequisite for synchronization, not proof that all files

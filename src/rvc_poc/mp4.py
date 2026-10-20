@@ -164,8 +164,33 @@ def patch_base(moof, output_offset):
         struct.pack_into(">Q", moof, pos + 16, output_offset)
 
 
+def audio_signature(item):
+    """Comparable audio table shape and timing, excluding source byte offsets."""
+    moof = item["moof"]
+    track = children_by_track(moof)[2]
+    tfhd_pos, tfhd_size = track[b"tfhd"]
+    trun_pos, trun_size = track[b"trun"]
+    tfdt_pos, tfdt_size = track[b"tfdt"]
+    tfhd = bytearray(moof[tfhd_pos:tfhd_pos + tfhd_size])
+    trun = bytearray(moof[trun_pos:trun_pos + trun_size])
+    tfdt = moof[tfdt_pos:tfdt_pos + tfdt_size]
+    if (tfhd_size < 24 or trun_size < 20 or tfdt_size < 16 or
+            not int.from_bytes(tfhd[9:12]) & 1 or
+            not int.from_bytes(trun[9:12]) & 1):
+        raise ValueError("unsupported audio table offsets")
+    tfhd[16:24] = b"\0" * 8
+    trun[16:20] = b"\0" * 4
+    if len(item["audio"]) != item["audio_bytes"]:
+        raise ValueError("audio payload length disagrees with table")
+    return (item["sequence"], item["audio_time"], item["audio_samples"],
+            item["audio_bytes"], bytes(tfhd), bytes(trun),
+            tfdt_size, bytes(tfdt[8:12]))
+
+
 def hybrid_fragment(video, audio, output_offset):
     """Combine video and audio payloads from matching timeline fragments."""
+    if audio_signature(video) != audio_signature(audio):
+        raise ValueError("audio donor table differs from selected video fragment")
     moof = bytearray(video["moof"])
     vt = children_by_track(moof)
     at = children_by_track(audio["moof"])
