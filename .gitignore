@@ -1,0 +1,11 @@
+*
+!.gitignore
+!README.md
+!LICENSE
+!pyproject.toml
+!docs/
+!docs/*.md
+!src/
+!src/rvc_poc/
+!src/rvc_poc/*.py
+
