@@ -5,14 +5,9 @@ recordings from a formatted disk. The tools also form a starting point for
 other fragmented MP4/MOV recovery work. They inspect the source read only and
 write new catalogs, captures, and reconstructed files to a separate location.
 
-**Experimental recovery software:** this is not a forensic guarantee or a
-universal repair utility. A plausible duration does not prove that picture
+**Experimental recovery software:** this is not a universal repair utility. A plausible duration does not prove that picture
 and sound are complete or correct.
 
-**No recovered media, disk image, real scan result, device identifier, filename,
-timestamp, hash, or case-specific disk offset is included in this repository.**
-All examples below use placeholders. Generated outputs contain private metadata;
-keep them outside this checkout.
 
 ## What the proof of concept does
 
